@@ -29,12 +29,12 @@ Just include the Ruby files in your MRuby build or load them into your MRuby VM.
 ---
 
 ## Basic Usage
-
+```ruby
 args = TypedArgs.opts("--mode=fast", "--debug=true")
 
 args["mode"]   # => "fast"
 args["debug"]  # => true
-
+```
 If no arguments are passed, TypedArgs.opts defaults to ARGV. You have to supply that Array yourself, take a look at tools/typedargs_test/test.c how to set that up.
 
 ---
@@ -46,11 +46,11 @@ TypedArgs defines a small, explicit grammar for keys and values.
 ---
 
 ## Scalars
-
+```
 --mode=fast
 --count=5
 --debug=true
-
+```
 Values may be:
 - strings
 - integers
@@ -60,57 +60,60 @@ Values may be:
 ---
 
 ## Dotted Keys
-
+```
 --db.user=root
 --cache.redis.host=localhost
-
+```
 Keys may contain letters, digits, underscore, dash, and dot.
 Keys may not start with a digit or dash.
 
 ---
 
 ## Arrays
-
+```
 --item+=a
 --item+=b
-
+```
 Result:
+```ruby
 { "item" => ["a", "b"] }
-
+```
 ---
 
 ## Hash Tuples
-
+```
 --range:min,max:=5,10
-
+```
 Result:
+```ruby
 { "range" => { "min" => 5, "max" => 10 } }
-
+```
 Arity is enforced: if you declare two fields, you must supply two values.
 
 ---
 
 ## Arrays of Hashes
-
+```
 --servers+:name,port:=alpha,80
 --servers+:name,port:=beta,443
-
+```
 Result:
+```ruby
 {
   "servers" => [
     { "name" => "alpha", "port" => 80 },
     { "name" => "beta",  "port" => 443 }
   ]
 }
-
+```
 ---
 
 ## Short‑Flag Aliases
-
+```ruby
 TypedArgs.alias("-v", "--verbose")
 TypedArgs.opts("-v")
 # => { "verbose" => true }
-
+```
 Aliases expand before parsing and can target dotted keys.
 
 ---
@@ -120,11 +123,11 @@ Aliases expand before parsing and can target dotted keys.
 TypedArgs provides compiler‑style diagnostics with caret indicators.
 
 Example:
-
+```
 --range:min,max:=5
                  ^
 Syntax error: Arity mismatch: expected 2, got 1
-
+```
 Every error includes:
 - the original argument
 - a caret pointing to the exact byte
@@ -274,10 +277,6 @@ This cheat sheet summarizes all major operator behaviors with examples.
 5. **Dotted keys**: treated as flat strings; no implicit nesting.  
 
 ---
-
-### Example Full Timeline
-
-
 
 ## License
 
