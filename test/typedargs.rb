@@ -235,3 +235,9 @@ assert("TypedArgs: alias expands to invalid key") do
     TypedArgs.opts("-x")
   end
 end
+
+assert("TypedArgs: nil literal") do
+  r = TypedArgs.opts("--foo=nil")
+  assert_nil r["foo"]
+  assert_true r.key?("foo")
+end

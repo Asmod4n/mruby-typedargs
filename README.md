@@ -56,6 +56,7 @@ Values may be:
 - integers
 - floats
 - booleans (true / false)
+- nil
 
 ---
 
@@ -185,7 +186,7 @@ This suite defines the language.
 
 # TypedArgs Operator Cheat Sheet
 
-TypedArgs applies **flags in order**. Later flags **overwrite previous values**, except when using explicit accumulation operators (`+=` / `+:fields:=`).  
+TypedArgs applies **flags in order**. Later flags **overwrite previous values**, except when using explicit accumulation operators (`+=` / `+:fields:=`).
 This cheat sheet summarizes all major operator behaviors with examples.
 
 ---
@@ -208,9 +209,9 @@ This cheat sheet summarizes all major operator behaviors with examples.
 | `--key+=value` | Append scalar to array           | `--foo+=2`                  | `{ "foo" => [2] }`             |
 |                |                                 | `--foo=1` <br> `--foo+=2`  | `{ "foo" => [2] }`             |
 
-> **Important:**  
-> - `+=` creates an array containing the appended value.  
-> - If the previous value was scalar or hash, it is **overwritten**.  
+> **Important:**
+> - `+=` creates an array containing the appended value.
+> - If the previous value was scalar or hash, it is **overwritten**.
 > - Accumulation only works if the last operator is also `+=` (see below).
 
 ---
@@ -233,13 +234,13 @@ This cheat sheet summarizes all major operator behaviors with examples.
 | `--key+:field1,field2:=v1,v2`    | Append a hash to an array       | `--servers+:name,port:=alpha,80`                | `[{"name"=>"alpha","port"=>80}]`            |
 | `--servers+:name,port:=beta,443` |Multiple append                  |                                                 | `[{"name"=>"alpha","port"=>80}, {"name"=>"beta","port"=>443}]` |
 
-> Creates array if key doesn’t exist. Only appends when using `+:` operator.  
+> Creates array if key doesn’t exist. Only appends when using `+:` operator.
 
 ---
 
 ## 5️⃣ Sequential Override Rules
 
-- **Later flags overwrite earlier flags** unless using accumulation operators.  
+- **Later flags overwrite earlier flags** unless using accumulation operators.
 - **Operator type determines the final value type**:
 
 | Sequence                                         | Result                  |
@@ -250,9 +251,9 @@ This cheat sheet summarizes all major operator behaviors with examples.
 | `--foo+:min,max:=1,2` <br> `--foo+:min,max:=3,4`| `[{"min"=>1,"max"=>2},{"min"=>3,"max"=>4}]`|
 | `--foo=1` <br> `--foo+=2` <br> `--foo:name:=alpha` <br> `--foo=bar` | `"bar"` |
 
-> Key points:  
-> - `=` and `:=` **always overwrite previous values**.  
-> - `+=` and `+:` **append only if previous value is of the same accumulation kind**.  
+> Key points:
+> - `=` and `:=` **always overwrite previous values**.
+> - `+=` and `+:` **append only if previous value is of the same accumulation kind**.
 > - Dotted keys are treated as **flat strings**, not nested hashes.
 
 ---
@@ -270,11 +271,11 @@ This cheat sheet summarizes all major operator behaviors with examples.
 
 ## 7️⃣ Notes & Recommendations
 
-1. **Sequential order matters**: flags are applied in the order received.  
-2. **Last-assignment-wins** unless explicit accumulation is used.  
-3. **Mixing types**: a scalar followed by an accumulation operator resets the type.  
-4. **Aliases**: short flags expand to long flags and follow the same rules.  
-5. **Dotted keys**: treated as flat strings; no implicit nesting.  
+1. **Sequential order matters**: flags are applied in the order received.
+2. **Last-assignment-wins** unless explicit accumulation is used.
+3. **Mixing types**: a scalar followed by an accumulation operator resets the type.
+4. **Aliases**: short flags expand to long flags and follow the same rules.
+5. **Dotted keys**: treated as flat strings; no implicit nesting.
 
 ---
 

@@ -405,6 +405,7 @@ module TypedArgs
           consume(:IDENT)
           return true  if v == "true"
           return false if v == "false"
+          return nil if v == "nil"
           v
         else
           raise TypedArgs::UnexpectedTokenError.new(
