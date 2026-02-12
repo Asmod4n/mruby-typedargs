@@ -180,6 +180,105 @@ This suite defines the language.
 
 ---
 
+# TypedArgs Operator Cheat Sheet
+
+TypedArgs applies **flags in order**. Later flags **overwrite previous values**, except when using explicit accumulation operators (`+=` / `+:fields:=`).  
+This cheat sheet summarizes all major operator behaviors with examples.
+
+---
+
+## 1️⃣ Scalar Assignment
+
+| Syntax         | Description                     | Example                     | Result                          |
+|----------------|---------------------------------|-----------------------------|--------------------------------|
+| `--key=value`  | Assign a scalar value            | `--foo=1`                  | `{ "foo" => 1 }`               |
+| `--key=true`   | Boolean assignment               | `--verbose=true`           | `{ "verbose" => true }`        |
+
+> Overwrites previous value, regardless of type.
+
+---
+
+## 2️⃣ Scalar Accumulation (`+=`)
+
+| Syntax         | Description                     | Example                     | Result                          |
+|----------------|---------------------------------|-----------------------------|--------------------------------|
+| `--key+=value` | Append scalar to array           | `--foo+=2`                  | `{ "foo" => [2] }`             |
+|                |                                 | `--foo=1` <br> `--foo+=2`  | `{ "foo" => [2] }`             |
+
+> **Important:**  
+> - `+=` creates an array containing the appended value.  
+> - If the previous value was scalar or hash, it is **overwritten**.  
+> - Accumulation only works if the last operator is also `+=` (see below).
+
+---
+
+## 3️⃣ Hash Tuple Assignment (`:=`)
+
+| Syntax                   | Description                     | Example                                 | Result                           |
+|--------------------------|---------------------------------|-----------------------------------------|---------------------------------|
+| `--key:field1,field2:=v1,v2` | Assign multiple values to hash | `--range:min,max:=5,10`                 | `{ "range" => { "min"=>5, "max"=>10 } }` |
+|                          | Dotted keys allowed       | `--db.user:id,name:=1,root`     | `{ "db.user" => { "id"=>1, "name"=>"root" } }` |
+
+> Overwrites any previous scalar, array, or hash.
+
+---
+
+## 4️⃣ Array of Hashes (`+:fields:=values`)
+
+| Syntax                           | Description                     | Example                                         | Result                                      |
+|----------------------------------|---------------------------------|-------------------------------------------------|---------------------------------------------|
+| `--key+:field1,field2:=v1,v2`    | Append a hash to an array       | `--servers+:name,port:=alpha,80`                | `[{"name"=>"alpha","port"=>80}]`            |
+| `--servers+:name,port:=beta,443` |Multiple append                  |                                                 | `[{"name"=>"alpha","port"=>80}, {"name"=>"beta","port"=>443}]` |
+
+> Creates array if key doesn’t exist. Only appends when using `+:` operator.  
+
+---
+
+## 5️⃣ Sequential Override Rules
+
+- **Later flags overwrite earlier flags** unless using accumulation operators.  
+- **Operator type determines the final value type**:
+
+| Sequence                                         | Result                  |
+|-------------------------------------------------|------------------------|
+| `--foo=1` <br> `--foo+=2`                       | `[2]`                  |
+| `--foo+=1` <br> `--foo+=2`                      | `[1,2]`                |
+| `--foo:min,max:=1,2` <br> `--foo:min,max:=3,4`  | `{ "min"=>3,"max"=>4 }`|
+| `--foo+:min,max:=1,2` <br> `--foo+:min,max:=3,4`| `[{"min"=>1,"max"=>2},{"min"=>3,"max"=>4}]`|
+| `--foo=1` <br> `--foo+=2` <br> `--foo:name:=alpha` <br> `--foo=bar` | `"bar"` |
+
+> Key points:  
+> - `=` and `:=` **always overwrite previous values**.  
+> - `+=` and `+:` **append only if previous value is of the same accumulation kind**.  
+> - Dotted keys are treated as **flat strings**, not nested hashes.
+
+---
+
+## 6️⃣ Summary Table: Operator Semantics
+
+| Operator      | Accumulates? | Overwrites previous? | Creates container if missing? | Example |
+|---------------|-------------|-------------------|-------------------------------|---------|
+| `=`           | ❌          | ✅                | ❌                            | `--foo=1` → `1` |
+| `+=`          | ✅ (arrays) | ✅ if type differs | ✅                            | `--foo+=2` → `[2]` |
+| `:=`          | ❌          | ✅                | ✅ (hash)                     | `--range:min,max:=5,10` → `{"min"=>5,"max"=>10}` |
+| `+:fields:=`  | ✅ (arrays of hashes) | ✅ if type differs | ✅ (array)                   | `--servers+:name,port:=alpha,80` → `[{"name"=>"alpha","port"=>80}]` |
+
+---
+
+## 7️⃣ Notes & Recommendations
+
+1. **Sequential order matters**: flags are applied in the order received.  
+2. **Last-assignment-wins** unless explicit accumulation is used.  
+3. **Mixing types**: a scalar followed by an accumulation operator resets the type.  
+4. **Aliases**: short flags expand to long flags and follow the same rules.  
+5. **Dotted keys**: treated as flat strings; no implicit nesting.  
+
+---
+
+### Example Full Timeline
+
+
+
 ## License
 
 Apache-2
