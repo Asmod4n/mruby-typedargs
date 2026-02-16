@@ -1,13 +1,14 @@
 module TypedArgs
   module Internal
-    CHAR_COMMA  = ",".getbyte(0)   # 44
-    CHAR_EQUAL  = "=".getbyte(0)   # 61
-    CHAR_DOT    = ".".getbyte(0)   # 46
-    CHAR_PLUS   = "+".getbyte(0)   # 43
-    CHAR_COLON  = ":".getbyte(0)   # 58
-    CHAR_QUOTE  = "\"".getbyte(0)  # 34
-    CHAR_DASH   = "-".getbyte(0)   # 45
-    CHAR_UNDERS = "_".getbyte(0)   # 95
+    CHAR_COMMA  = ",".getbyte(0)
+    CHAR_EQUAL  = "=".getbyte(0)
+    CHAR_DOT    = ".".getbyte(0)
+    CHAR_PLUS   = "+".getbyte(0)
+    CHAR_COLON  = ":".getbyte(0)
+    CHAR_QUOTE  = "\"".getbyte(0)
+    CHAR_DASH   = "-".getbyte(0)
+    CHAR_UNDERS = "_".getbyte(0)
+    CHAR_BACKSLASH = "\\".getbyte(0)
 
     CHAR_0 = "0".getbyte(0)
     CHAR_9 = "9".getbyte(0)
@@ -34,7 +35,7 @@ module TypedArgs
       def strip_leading_dashes(str)
         i = 0
         n = str.bytesize
-        while i < n && str.getbyte(i) == 45 # '-'
+        while i < n && str.getbyte(i) == 45
           i += 1
         end
         str[i, n - i]
@@ -50,12 +51,8 @@ module TypedArgs
       end
     end
 
-    # ============================================================
-    # TOKEN
-    # ============================================================
     class Token
       attr_accessor :type, :value, :pos
-
       def initialize(type, value, pos)
         @type  = type
         @value = value
@@ -63,9 +60,6 @@ module TypedArgs
       end
     end
 
-    # ============================================================
-    # LEXER
-    # ============================================================
     class Lexer
       attr_reader :str
 
@@ -125,20 +119,51 @@ module TypedArgs
         end
       end
 
+      # Only \" and \\ escapes remain
       def string_token
         start = @i
         @i += 1
         buf = ""
+
         while @i < @end
           c = @str.getbyte(@i)
-          if c == CHAR_QUOTE
+
+          if c == CHAR_BACKSLASH
+            @i += 1
+            if @i >= @end
+              raise TypedArgs::UnterminatedStringError.new(
+                "Unterminated string",
+                start,
+                @str
+              )
+            end
+
+            esc = @str.getbyte(@i)
+            case esc
+            when CHAR_QUOTE
+              buf += "\""
+              @i += 1
+            when CHAR_BACKSLASH
+              buf += "\\"
+              @i += 1
+            else
+              raise TypedArgs::SyntaxError.new(
+                "Invalid escape sequence",
+                @i,
+                @str
+              )
+            end
+
+          elsif c == CHAR_QUOTE
             @i += 1
             return Token.new(:STRING, buf, start)
+
           else
-            buf = buf + @str[@i, 1]
+            buf += @str[@i, 1]
             @i += 1
           end
         end
+
         raise TypedArgs::UnterminatedStringError.new(
           "Unterminated string",
           start,
@@ -168,13 +193,13 @@ module TypedArgs
             @str
           )
         end
-        buf = buf + @str[@i, 1]
+        buf += @str[@i, 1]
         @i += 1
 
         while @i < @end
           c = @str.getbyte(@i)
           break unless ident_continue?(c)
-          buf = buf + @str[@i, 1]
+          buf += @str[@i, 1]
           @i += 1
         end
 
@@ -187,14 +212,14 @@ module TypedArgs
         dot   = false
 
         if @str.getbyte(@i) == CHAR_DASH
-          buf = buf + "-"
+          buf += "-"
           @i += 1
         end
 
         while @i < @end
           c = @str.getbyte(@i)
           if Internal.digit?(c)
-            buf = buf + @str[@i, 1]
+            buf += @str[@i, 1]
             @i += 1
           elsif c == CHAR_DOT
             if dot
@@ -205,7 +230,7 @@ module TypedArgs
               )
             end
             dot = true
-            buf = buf + "."
+            buf += "."
             @i += 1
           else
             break
@@ -220,9 +245,6 @@ module TypedArgs
       end
     end
 
-    # ============================================================
-    # KEY PARSER
-    # ============================================================
     class KeyParser
       def initialize(lexer)
         @lx  = lexer
@@ -234,7 +256,6 @@ module TypedArgs
         array  = false
         fields = nil
 
-        # structural dot validation
         if key.bytesize > 0 && key.getbyte(key.bytesize - 1) == CHAR_DOT
           raise TypedArgs::UnexpectedTokenError.new(
             "Expected IDENT after DOT",
@@ -364,9 +385,6 @@ module TypedArgs
       end
     end
 
-    # ============================================================
-    # VALUE PARSER
-    # ============================================================
     class ValueParser
       def initialize(lexer)
         @lx  = lexer
@@ -430,9 +448,6 @@ module TypedArgs
       end
     end
 
-    # ============================================================
-    # IMPL
-    # ============================================================
     module Impl
       class << self
         def parse(argv)
@@ -484,20 +499,38 @@ module TypedArgs
           name = Internal.resolve_name(key_ast[:name])
 
           if val_start
-            val_lexer = Lexer.new(arg, val_start, val_len)
-            vp        = ValueParser.new(val_lexer)
+            raw = arg[val_start, val_len]
 
-            case key_ast[:kind]
-            when :scalar
-              value = vp.parse_scalar
-            when :array_scalar
-              value = vp.parse_scalar
-            when :hash
-              tuple = vp.parse_tuple(key_ast[:fields].size)
-              value = build_hash(key_ast[:fields], tuple)
-            when :array_hash
-              tuple = vp.parse_tuple(key_ast[:fields].size)
-              value = build_hash(key_ast[:fields], tuple)
+            if raw.getbyte(0) == CHAR_QUOTE
+              # QUOTED → full parser
+              val_lexer = Lexer.new(arg, val_start, val_len)
+              vp        = ValueParser.new(val_lexer)
+
+              case key_ast[:kind]
+              when :scalar, :array_scalar
+                value = vp.parse_scalar
+              when :hash, :array_hash
+                tuple = vp.parse_tuple(key_ast[:fields].size)
+                value = build_hash(key_ast[:fields], tuple)
+              end
+
+            elsif (key_ast[:kind] == :scalar || key_ast[:kind] == :array_scalar) &&
+                  raw.index(" ") && !raw.index(",")
+              # UNQUOTED + SPACE + SCALAR + NO COMMAS → raw string
+              value = raw
+
+            else
+              # Everything else → full parser
+              val_lexer = Lexer.new(arg, val_start, val_len)
+              vp        = ValueParser.new(val_lexer)
+
+              case key_ast[:kind]
+              when :scalar, :array_scalar
+                value = vp.parse_scalar
+              when :hash, :array_hash
+                tuple = vp.parse_tuple(key_ast[:fields].size)
+                value = build_hash(key_ast[:fields], tuple)
+              end
             end
           else
             value = true
@@ -510,7 +543,6 @@ module TypedArgs
           raw  = arg[0,2]
           name = Internal.resolve_name(raw)
 
-          # validate alias-expanded short key
           if name.nil? || name.bytesize == 0
             raise TypedArgs::InvalidKeyStartError.new(
               "Invalid key start",
