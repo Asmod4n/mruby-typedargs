@@ -5,12 +5,15 @@ module TypedArgs
         def parse(argv)
           out = {}
           i = 0
-          while i < argv.size
-            arg = argv[i]
-            if long_flag?(arg)
-              parse_long(out, arg)
-            elsif short_flag?(arg)
-              parse_short(out, arg)
+          n = argv.size
+          while i < n
+            a = argv[i]
+            if a && a.length > 0
+              if long_flag?(a)
+                parse_long(out, a)
+              elsif short_flag?(a)
+                parse_short(out, a)
+              end
             end
             i += 1
           end
@@ -18,59 +21,53 @@ module TypedArgs
         end
 
         def long_flag?(arg)
-          arg.bytesize >= 2 &&
-          arg.getbyte(0) == CHAR_DASH &&
-          arg.getbyte(1) == CHAR_DASH
+          arg.length >= 2 &&
+          arg[0,1] == "-" &&
+          arg[1,1] == "-"
         end
 
         def short_flag?(arg)
-          arg.bytesize >= 1 &&
-          arg.getbyte(0) == CHAR_DASH &&
-          !(arg.bytesize >= 2 && arg.getbyte(1) == CHAR_DASH)
+          arg.length >= 1 &&
+          arg[0,1] == "-" &&
+          !(arg.length >= 2 && arg[1,1] == "-")
         end
 
-        def parse_long(out, arg)
-          body_start = 2
-          body_len   = arg.bytesize - 2
-          body       = arg[body_start, body_len]
-          eq         = body.index("=")
 
-          if eq
-            key_len   = eq
-            val_start = body_start + eq + 1
-            val_len   = arg.bytesize - val_start
+        # In impl.rb, replace parse_long or parse_long-like logic with:
+
+        def parse_long(out, arg)
+          # body as character substring (character-mode)
+          body = arg[2, arg.length - 2]   # "--" removed, character-based
+
+          # find '=' in character mode
+          eq_idx = body.index("=")
+
+          if eq_idx
+            key_str = body[0, eq_idx]    # character substring for key
+            val_str = body[(eq_idx + 1), body.length - (eq_idx + 1)] # character substring for value
           else
-            key_len   = body_len
-            val_start = nil
-            val_len   = 0
+            key_str = body
+            val_str = nil
           end
 
-          key_lexer = Lexer.new(arg, body_start, key_len, true)
-          key_ast   = KeyParser.new(key_lexer).parse
+          # parse key in character mode
+          key_lex = Lexer.new(key_str, 0, key_str.length, true)
+          key_ast = KeyParser.new(key_lex).parse
 
           name = Internal.resolve_name(key_ast[:name])
 
-          unless Internal.valid_key_script?(name)
-            raise TypedArgs::InvalidCharacterError.new(
-              "Invalid or mixed-script key",
-              0,
-              name
-            )
-          end
+          # script check (character indices)
+          ScriptCheck.validate_key(key_str)
 
-          if val_start
-            val_lexer = Lexer.new(arg, val_start, val_len)
-            vp        = ValueParser.new(val_lexer)
+          if val_str
+            # parse value in character mode (value lexer now also character-based)
+            val_lex = Lexer.new(val_str, 0, val_str.length, false)
+            vp = ValueParser.new(val_lex)
 
             case key_ast[:kind]
-            when :scalar
+            when :scalar, :array_scalar
               value = vp.parse_scalar
-            when :array_scalar
-              value = vp.parse_scalar
-            when :hash
-              tuple = vp.parse_tuple(key_ast[:fields].size)
-              value = build_hash(key_ast[:fields], tuple)
-            when :array_hash
+            when :hash, :array_hash
               tuple = vp.parse_tuple(key_ast[:fields].size)
               value = build_hash(key_ast[:fields], tuple)
             end
@@ -81,11 +78,12 @@ module TypedArgs
           assign(out, name, key_ast, value)
         end
 
+
         def parse_short(out, arg)
           raw  = arg[0,2]
           name = Internal.resolve_name(raw)
 
-          if name.nil? || name.bytesize == 0
+          if name.nil? || name.length == 0
             raise TypedArgs::InvalidKeyStartError.new(
               "Invalid key start",
               1,
@@ -93,8 +91,12 @@ module TypedArgs
             )
           end
 
-          c0 = name.getbyte(0)
-          unless Internal.alpha?(c0) || c0 == CHAR_UNDERS
+          # first character validation (character-mode)
+          c0 = name[0,1]
+          unless c0 == "_" ||
+                (c0 >= "A" && c0 <= "Z") ||
+                (c0 >= "a" && c0 <= "z") ||
+                (c0 > "\u007F") # treat non-ASCII single-char as letter candidate
             raise TypedArgs::InvalidCharacterError.new(
               "Illegal character in short flag",
               1,
@@ -102,12 +104,19 @@ module TypedArgs
             )
           end
 
+          # remaining characters validation (character-mode)
           j = 1
-          while j < name.bytesize
-            c = name.getbyte(j)
-            unless Internal.alpha?(c) ||
-                   Internal.digit?(c) ||
-                   c == CHAR_UNDERS || c == CHAR_DASH || c == CHAR_DOT
+          while j < name.length
+            ch = name[j,1]
+            valid =
+              ch == "_" ||
+              (ch >= "A" && ch <= "Z") ||
+              (ch >= "a" && ch <= "z") ||
+              (ch >= "0" && ch <= "9") ||
+              ch == "-" ||
+              ch == "." ||
+              (ch > "\u007F") # allow non-ASCII letters
+            unless valid
               raise TypedArgs::InvalidCharacterError.new(
                 "Illegal character in short flag",
                 1,
@@ -117,18 +126,19 @@ module TypedArgs
             j += 1
           end
 
-          if arg.bytesize > 2
-            val_start = 2
-            val_len   = arg.bytesize - 2
-            val_lexer = Lexer.new(arg, val_start, val_len)
-            vp        = ValueParser.new(val_lexer)
-            value     = vp.parse_scalar
+          # attached value (character-mode)
+          if arg.length > 2
+            val_str = arg[2, arg.length - 2]
+            val_lex = Lexer.new(val_str, 0, val_str.length, false)
+            vp      = ValueParser.new(val_lex)
+            value   = vp.parse_scalar
           else
             value = true
           end
 
           out[name] = value
         end
+
 
         def build_hash(fields, vals)
           h = {}

@@ -1,7 +1,7 @@
 module TypedArgs
   module Internal
     SCRIPT_ASCII    = 1
-    SCRIPT_LATIN    = 2
+    SCRIPT_LATIN    = 1
     SCRIPT_GREEK    = 3
     SCRIPT_CYRILLIC = 4
     SCRIPT_OTHER    = 5

@@ -1,40 +1,62 @@
+# script_check.rb (optimized)
 module TypedArgs
   module Internal
-    def self.script_bucket(cp)
-      if cp <= 0x7F
-        return SCRIPT_ASCII if (cp >= 0x41 && cp <= 0x5A) || (cp >= 0x61 && cp <= 0x7A)
-        return SCRIPT_OTHER
-      end
+    module ScriptCheck
+      LATIN_RANGES = [
+        ["\u00C0", "\u024F"]
+      ]
+      GREEK_RANGES = [
+        ["\u0370", "\u03FF"]
+      ]
+      CYRILLIC_RANGES = [
+        ["\u0400", "\u04FF"]
+      ]
 
-      return SCRIPT_LATIN     if (0x00C0 <= cp && cp <= 0x024F)
-      return SCRIPT_GREEK     if (0x0370 <= cp && cp <= 0x03FF)
-      return SCRIPT_CYRILLIC  if (0x0400 <= cp && cp <= 0x04FF)
-
-      SCRIPT_OTHER
-    end
-
-    def self.valid_key_script?(str)
-      seen = nil
-      i = 0
-      n = str.bytesize
-
-      while i < n
-        b = str.getbyte(i)
-        return false unless printable_byte?(b)
-
-        cp, ni = utf8_next(str, i)
-        return false if cp.nil?
-
-        bucket = script_bucket(cp)
-        if bucket != SCRIPT_OTHER
-          return false if seen && seen != bucket
-          seen ||= bucket
+      def self.in_ranges?(ch, ranges)
+        j = 0
+        while j < ranges.length
+          start_ch, end_ch = ranges[j]
+          return true if ch >= start_ch && ch <= end_ch
+          j += 1
         end
-
-        i = ni
+        false
       end
 
-      true
+      def self.char_bucket(ch)
+        return :latin    if (ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z") || in_ranges?(ch, LATIN_RANGES)
+        return :greek    if in_ranges?(ch, GREEK_RANGES)
+        return :cyrillic if in_ranges?(ch, CYRILLIC_RANGES)
+        :other
+      end
+
+      def self.validate_key(str)
+        seen = nil
+        i = 0
+        n = str.length
+        while i < n
+          ch = str[i,1]
+          # skip punctuation
+          if ch == "." || ch == "+" || ch == ":" || ch == ","
+            i += 1
+            next
+          end
+          # underscore and digits ignored for bucket
+          if ch == "_" || (ch >= "0" && ch <= "9")
+            i += 1
+            next
+          end
+
+          bucket = char_bucket(ch)
+          if bucket != :other
+            if seen && seen != bucket
+              raise TypedArgs::InvalidCharacterError.new("Invalid or mixed-script key", i, str)
+            end
+            seen ||= bucket
+          end
+          i += 1
+        end
+        true
+      end
     end
   end
 end

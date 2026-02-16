@@ -1,14 +1,5 @@
 module TypedArgs
   module Internal
-    CHAR_COMMA  = ",".getbyte(0)
-    CHAR_EQUAL  = "=".getbyte(0)
-    CHAR_DOT    = ".".getbyte(0)
-    CHAR_PLUS   = "+".getbyte(0)
-    CHAR_COLON  = ":".getbyte(0)
-    CHAR_QUOTE  = "\"".getbyte(0)
-    CHAR_DASH   = "-".getbyte(0)
-    CHAR_UNDERS = "_".getbyte(0)
-
     CHAR_0 = "0".getbyte(0)
     CHAR_9 = "9".getbyte(0)
     CHAR_A = "A".getbyte(0)
@@ -34,7 +25,7 @@ module TypedArgs
       def strip_leading_dashes(str)
         i = 0
         n = str.bytesize
-        while i < n && str.getbyte(i) == CHAR_DASH
+        while i < n && str[i,1] == "-"
           i += 1
         end
         str[i, n - i]

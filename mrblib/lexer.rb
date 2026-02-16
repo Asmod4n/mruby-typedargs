@@ -1,16 +1,15 @@
+# lexer.rb (optimized)
 module TypedArgs
   module Internal
     class Lexer
       attr_reader :str
 
-      def initialize(str, start_pos, bytesize, parsing_key = false)
-        @str   = str
-        @i     = start_pos
-        @start = start_pos
-        @end   = start_pos + bytesize
-        @n     = str.bytesize
-        @end   = @n if @end > @n
+      def initialize(str, start_pos, char_length, parsing_key = false)
+        @str = str || ""
         @parsing_key = !!parsing_key
+        @i = start_pos || 0
+        @start = @i
+        @end = [@start + (char_length || 0), @str.length].min
       end
 
       def parsing_key?
@@ -18,164 +17,192 @@ module TypedArgs
       end
 
       def next_token
-        skip_ws
-        return Token.new(:EOF, nil, @i) if @i >= @end
+        s = @str
+        i = @i
+        end_i = @end
 
-        c = @str.getbyte(@i)
+        # skip whitespace
+        while i < end_i
+          ch = s[i,1]
+          break unless ch <= " "
+          i += 1
+        end
+        @i = i
+        return Token.new(:EOF, nil, i) if i >= end_i
 
-        case c
-        when CHAR_COMMA then return simple(:COMMA)
-        when CHAR_EQUAL then return simple(:EQUAL)
-        when CHAR_DOT   then return simple(:DOT)
-        when CHAR_PLUS  then return simple(:PLUS)
-        when CHAR_COLON then return simple(:COLON)
-        when CHAR_QUOTE then return string_token
-        else
-          return ident_token if parsing_key?
+        ch = s[i,1]
 
-          if Internal.digit?(c) || (c == CHAR_DASH && peek_digit?)
-            return number_token
-          end
-
-          if Internal.alpha?(c) || c == CHAR_UNDERS || c >= 0x80
-            j = @i
-            all_ident = true
-            while j < @end
-              cc = @str.getbyte(j)
-              break if cc <= 32 || cc == CHAR_COMMA
-              unless ident_continue?(cc)
-                all_ident = false
-                break
-              end
-              j += 1
+        # single-char tokens
+        case ch
+        when "," then @i = i + 1; return Token.new(:COMMA, nil, i)
+        when "=" then @i = i + 1; return Token.new(:EQUAL, nil, i)
+        when "." then @i = i + 1; return Token.new(:DOT, nil, i)
+        when "+" then @i = i + 1; return Token.new(:PLUS, nil, i)
+        when ":" then @i = i + 1; return Token.new(:COLON, nil, i)
+        when "\"" then
+          # string token: scan until closing quote, build value once
+          start = i
+          i += 1
+          while i < end_i
+            c = s[i,1]
+            if c == "\""
+              val = s[start + 1, i - (start + 1)]
+              @i = i + 1
+              return Token.new(:STRING, val, start)
             end
-            return all_ident ? ident_token : raw_value_token
+            i += 1
           end
-
-          raw_value_token
-        end
-      end
-
-      def raw_value_token
-        start = @i
-        buf = ""
-        while @i < @end
-          c = @str.getbyte(@i)
-          break if c <= 32 || c == CHAR_COMMA
-          buf += @str[@i,1]
-          @i += 1
+          # unterminated
+          raise TypedArgs::UnterminatedStringError.new("Unterminated string", start, s)
         end
 
-        if buf.bytesize > 0
-          all_dashes = true
-          buf.bytes.each do |b|
-            all_dashes = false if b != CHAR_DASH
+        # parsing_key fast path
+        if @parsing_key
+          return ident_token_fast(s, i, end_i)
+        end
+
+        # value side: number, ident-like, or raw
+        if ascii_digit?(ch) || (ch == "-" && peek_ascii_digit?(s, i, end_i))
+          return number_token_fast(s, i, end_i)
+        end
+
+        if ident_start_char?(ch)
+          # try to scan an ident-like token; if any char fails ident_continue, fall back to raw
+          j = i
+          all_ident = true
+          while j < end_i
+            cc = s[j,1]
+            break if cc <= " " || cc == ","
+            unless ident_continue_char?(cc)
+              all_ident = false
+              break
+            end
+            j += 1
           end
-          raise TypedArgs::InvalidCharacterError.new("Illegal number", start, @str) if all_dashes
+          if all_ident
+            # produce IDENT token
+            val = s[i, j - i]
+            @i = j
+            return Token.new(:IDENT, val, i)
+          else
+            # raw value: scan until whitespace or comma
+            start = i
+            while i < end_i
+              cc = s[i,1]
+              break if cc <= " " || cc == ","
+              i += 1
+            end
+            val = s[start, i - start]
+            @i = i
+            # detect all-dash invalid number
+            if all_dashes?(val)
+              raise TypedArgs::InvalidCharacterError.new("Illegal number", start, s)
+            end
+            return Token.new(:STRING, val, start)
+          end
         end
 
-        Token.new(:STRING, buf, start)
+        # fallback raw value
+        start = i
+        while i < end_i
+          cc = s[i,1]
+          break if cc <= " " || cc == ","
+          i += 1
+        end
+        val = s[start, i - start]
+        @i = i
+        if all_dashes?(val)
+          raise TypedArgs::InvalidCharacterError.new("Illegal number", start, s)
+        end
+        Token.new(:STRING, val, start)
       end
 
       private
 
-      def peek_digit?
-        return false if (@i + 1) >= @end
-        Internal.digit?(@str.getbyte(@i + 1))
-      end
-
-      def simple(type)
-        tok = Token.new(type, nil, @i)
-        @i += 1
-        tok
-      end
-
-      def skip_ws
-        while @i < @end && @str.getbyte(@i) <= 32
-          @i += 1
-        end
-      end
-
-      def string_token
-        start = @i
-        @i += 1
-        buf = ""
-        while @i < @end
-          c = @str.getbyte(@i)
-          if c == CHAR_QUOTE
-            @i += 1
-            return Token.new(:STRING, buf, start)
+      # IDENT token when parsing_key true
+      def ident_token_fast(s, i, end_i)
+        start = i
+        ch = s[i,1]
+        unless ident_start_char?(ch)
+          if ascii_digit?(ch)
+            raise TypedArgs::InvalidKeyStartError.new("Invalid key start", i, s)
           else
-            buf += @str[@i,1]
-            @i += 1
+            raise TypedArgs::InvalidCharacterError.new("Illegal character in key", i, s)
           end
         end
-        raise TypedArgs::UnterminatedStringError.new("Unterminated string", start, @str)
-      end
-
-      def ident_start?(c)
-        Internal.alpha?(c) || c == CHAR_UNDERS || c >= 0x80
-      end
-
-      def ident_continue?(c)
-        Internal.alpha?(c) ||
-        Internal.digit?(c) ||
-        c == CHAR_UNDERS || c == CHAR_DASH || c == CHAR_DOT ||
-        c >= 0x80
-      end
-
-      def ident_token
-        start = @i
-        buf = ""
-        c = @str.getbyte(@i)
-        unless ident_start?(c)
-          if Internal.digit?(c)
-            raise TypedArgs::InvalidKeyStartError.new("Invalid key start", @i, @str)
-          else
-            raise TypedArgs::InvalidCharacterError.new("Illegal character in key", @i, @str)
-          end
+        i += 1
+        while i < end_i
+          c = s[i,1]
+          break unless ident_continue_char?(c)
+          i += 1
         end
-        buf += @str[@i,1]
-        @i += 1
-        while @i < @end
-          c = @str.getbyte(@i)
-          break unless ident_continue?(c)
-          buf += @str[@i,1]
-          @i += 1
-        end
-        Token.new(:IDENT, buf, start)
+        val = s[start, i - start]
+        @i = i
+        Token.new(:IDENT, val, start)
       end
 
-      def number_token
-        start = @i
-        buf = ""
-        dot = false
+      def number_token_fast(s, i, end_i)
+        start = i
         digits = 0
+        dot = false
 
-        if @str.getbyte(@i) == CHAR_DASH
-          buf += "-"
-          @i += 1
+        if s[i,1] == "-"
+          i += 1
         end
 
-        while @i < @end
-          c = @str.getbyte(@i)
-          if Internal.digit?(c)
-            buf += @str[@i,1]
-            @i += 1
+        while i < end_i
+          c = s[i,1]
+          if ascii_digit?(c)
             digits += 1
-          elsif c == CHAR_DOT
-            raise TypedArgs::InvalidNumberError.new("Invalid number format", start, @str) if dot
+            i += 1
+          elsif c == "."
+            raise TypedArgs::InvalidNumberError.new("Invalid number format", start, s) if dot
             dot = true
-            buf += "."
-            @i += 1
+            i += 1
           else
             break
           end
         end
 
-        raise TypedArgs::InvalidCharacterError.new("Illegal number", start, @str) if digits == 0
+        raise TypedArgs::InvalidCharacterError.new("Illegal number", start, s) if digits == 0
 
-        Token.new(dot ? :NUMBER : :NUMBER, dot ? buf.to_f : buf.to_i, start)
+        val = s[start, i - start]
+        @i = i
+        Token.new(:NUMBER, val, start)
+      end
+
+      # helpers (inlined ASCII fast paths)
+      def ascii_digit?(ch)
+        ch >= "0" && ch <= "9"
+      end
+
+      def all_dashes?(str)
+        k = 0
+        while k < str.length
+          return false if str[k,1] != "-"
+          k += 1
+        end
+        true
+      end
+
+      def ident_start_char?(ch)
+        return true if ch == "_"
+        return true if (ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z")
+        # non-ASCII single-char candidate
+        ch.length == 1 && ch > "\u007F"
+      end
+
+      def ident_continue_char?(ch)
+        return true if ident_start_char?(ch)
+        return true if ascii_digit?(ch)
+        return true if ch == "-" || ch == "."
+        false
+      end
+
+      def peek_ascii_digit?(s, i, end_i)
+        return false if (i + 1) >= end_i
+        c = s[i + 1,1]
+        c >= "0" && c <= "9"
       end
     end
   end

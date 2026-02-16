@@ -1,3 +1,4 @@
+# key_parser.rb
 module TypedArgs
   module Internal
     class KeyParser
@@ -11,33 +12,20 @@ module TypedArgs
         array  = false
         fields = nil
 
-        # structural dot validation
-        if key.bytesize > 0 && key.getbyte(key.bytesize - 1) == CHAR_DOT
-          raise TypedArgs::UnexpectedTokenError.new(
-            "Expected IDENT after DOT",
-            0,
-            @lx.str
-          )
+        if key.length > 0 && key[key.length - 1,1] == "."
+          raise TypedArgs::UnexpectedTokenError.new("Expected IDENT after DOT", 0, @lx.str)
         end
 
         i = 0
-        while i + 1 < key.bytesize
-          if key.getbyte(i) == CHAR_DOT && key.getbyte(i + 1) == CHAR_DOT
-            raise TypedArgs::UnexpectedTokenError.new(
-              "Unexpected DOT",
-              0,
-              @lx.str
-            )
+        while i + 1 < key.length
+          if key[i,1] == "." && key[i + 1,1] == "."
+            raise TypedArgs::UnexpectedTokenError.new("Unexpected DOT", 0, @lx.str)
           end
           i += 1
         end
 
         if key.index(".") && @tok.type == :PLUS
-          raise TypedArgs::InvalidSuffixPositionError.new(
-            "Suffix must be at end of key",
-            @tok.pos,
-            @lx.str
-          )
+          raise TypedArgs::InvalidSuffixPositionError.new("Suffix must be at end of key", @tok.pos, @lx.str)
         end
 
         if @tok.type == :PLUS
@@ -52,11 +40,7 @@ module TypedArgs
         end
 
         if @tok.type == :PLUS || @tok.type == :COLON || @tok.type == :IDENT || @tok.type == :DOT
-          raise TypedArgs::InvalidSuffixPositionError.new(
-            "Suffix must be at end of key",
-            @tok.pos,
-            @lx.str
-          )
+          raise TypedArgs::InvalidSuffixPositionError.new("Suffix must be at end of key", @tok.pos, @lx.str)
         end
 
         kind =
@@ -73,11 +57,7 @@ module TypedArgs
 
       def parse_key_string
         if @tok.type != :IDENT
-          raise TypedArgs::InvalidKeyStartError.new(
-            "Invalid key start",
-            @tok.pos,
-            @lx.str
-          )
+          raise TypedArgs::InvalidKeyStartError.new("Invalid key start", @tok.pos, @lx.str)
         end
 
         first = expect(:IDENT).value
@@ -86,11 +66,7 @@ module TypedArgs
         while @tok.type == :DOT
           consume(:DOT)
           if @tok.type != :IDENT
-            raise TypedArgs::UnexpectedTokenError.new(
-              "Expected IDENT, got " + @tok.type.to_s,
-              @tok.pos,
-              @lx.str
-            )
+            raise TypedArgs::UnexpectedTokenError.new("Expected IDENT, got " + @tok.type.to_s, @tok.pos, @lx.str)
           end
           part = expect(:IDENT).value
           buf = buf + "." + part
@@ -102,21 +78,13 @@ module TypedArgs
       def parse_ident_list
         list = []
         if @tok.type != :IDENT
-          raise TypedArgs::InvalidFieldListError.new(
-            "Expected IDENT",
-            @tok.pos,
-            @lx.str
-          )
+          raise TypedArgs::InvalidFieldListError.new("Expected IDENT", @tok.pos, @lx.str)
         end
         list.push(expect(:IDENT).value)
         while @tok.type == :COMMA
           consume(:COMMA)
           if @tok.type != :IDENT
-            raise TypedArgs::InvalidFieldListError.new(
-              "Expected IDENT",
-              @tok.pos,
-              @lx.str
-            )
+            raise TypedArgs::InvalidFieldListError.new("Expected IDENT", @tok.pos, @lx.str)
           end
           list.push(expect(:IDENT).value)
         end
@@ -125,11 +93,7 @@ module TypedArgs
 
       def expect(type)
         if @tok.type != type
-          raise TypedArgs::UnexpectedTokenError.new(
-            "Expected #{type}, got #{@tok.type}",
-            @tok.pos,
-            @lx.str
-          )
+          raise TypedArgs::UnexpectedTokenError.new("Expected #{type}, got #{@tok.type}", @tok.pos, @lx.str)
         end
         tok = @tok
         @tok = @lx.next_token
