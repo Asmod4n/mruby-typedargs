@@ -20,6 +20,7 @@ module TypedArgs
           out
         end
 
+        private
         def long_flag?(arg)
           arg.length >= 2 &&
           arg[0,1] == "-" &&

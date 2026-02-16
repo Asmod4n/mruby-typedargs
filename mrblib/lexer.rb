@@ -39,21 +39,24 @@ module TypedArgs
         when "." then @i = i + 1; return Token.new(:DOT, nil, i)
         when "+" then @i = i + 1; return Token.new(:PLUS, nil, i)
         when ":" then @i = i + 1; return Token.new(:COLON, nil, i)
-        when "\"" then
-          # string token: scan until closing quote, build value once
-          start = i
-          i += 1
-          while i < end_i
-            c = s[i,1]
-            if c == "\""
-              val = s[start + 1, i - (start + 1)]
-              @i = i + 1
-              return Token.new(:STRING, val, start)
-            end
-            i += 1
-          end
-          # unterminated
-          raise TypedArgs::UnterminatedStringError.new("Unterminated string", start, s)
+when "\""
+  start = i
+  i += 1
+
+  # scan UTF‑8 codepoints until closing quote
+  while i < end_i
+    cp, ni = TypedArgs::Internal.utf8_next(s, i)
+
+    if cp == 0x22  # '"'
+      val = s[start + 1, i - (start + 1)]
+      @i = ni
+      return Token.new(:STRING, val, start)
+    end
+
+    i = ni
+  end
+
+  raise TypedArgs::UnterminatedStringError.new("Unterminated string", start, s)
         end
 
         # parsing_key fast path
@@ -72,7 +75,7 @@ module TypedArgs
           all_ident = true
           while j < end_i
             cc = s[j,1]
-            break if cc <= " " || cc == ","
+            break if cc == ","
             unless ident_continue_char?(cc)
               all_ident = false
               break
@@ -89,7 +92,7 @@ module TypedArgs
             start = i
             while i < end_i
               cc = s[i,1]
-              break if cc <= " " || cc == ","
+              break if cc == ","
               i += 1
             end
             val = s[start, i - start]

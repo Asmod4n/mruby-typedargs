@@ -58,7 +58,9 @@ module TypedArgs
 
       def convert_number_token(s)
         return s.to_i if integer_string?(s)
-        return s.to_f if float_string?(s)
+        if Object.const_defined?(:Float)
+          return s.to_f if float_string?(s)
+        end
         raise TypedArgs::InvalidNumberError.new("Invalid number", 0, s)
       end
 
