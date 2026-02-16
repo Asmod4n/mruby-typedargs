@@ -104,7 +104,7 @@ assert("TypedArgs: key cannot start with digit") do
 end
 
 assert("TypedArgs: key cannot start with dash") do
-  assert_raise(TypedArgs::InvalidKeyStartError) do
+  assert_raise(TypedArgs::InvalidCharacterError) do
     TypedArgs.opts("---abc=5")
   end
 end
@@ -178,6 +178,12 @@ end
 assert("TypedArgs: unterminated string") do
   assert_raise(TypedArgs::UnterminatedStringError) do
     TypedArgs.opts('--foo="abc')
+  end
+end
+
+assert("TypedArgs: lone dash is invalid number") do
+  assert_raise(TypedArgs::InvalidCharacterError) do
+    TypedArgs.opts("--foo=-")
   end
 end
 

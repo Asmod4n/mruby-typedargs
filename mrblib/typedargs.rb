@@ -31,9 +31,5 @@ module TypedArgs
       args = argv.empty? ? ::ARGV : argv
       Internal::Impl.parse(args)
     end
-
-    def [](key)
-      opts[key]
-    end
   end
 end

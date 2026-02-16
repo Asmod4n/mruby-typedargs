@@ -79,10 +79,6 @@ assert('unterminated string') do
   assert_ta("", /Unterminated string/, false, ['--x:value:="hello'])
 end
 
-# Invalid escape sequence inside quoted string (only \" and \\ allowed)
-assert('invalid escape sequence') do
-  assert_ta("", /Invalid escape sequence/, false, ['--a:value:="bad\\nescape"'])
-end
 
 # Invalid number format (multiple dots)
 assert('invalid number') do

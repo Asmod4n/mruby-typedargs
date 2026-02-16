@@ -56,3 +56,4 @@ build-iPhoneSimulator/
 # .rubocop-https?--*
 build_config.rb.lock
 /mruby/
+compile_commands.json
