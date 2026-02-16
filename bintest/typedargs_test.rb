@@ -60,6 +60,37 @@ assert('array of hashes') do
   )
 end
 
+# Add this integration test near the other assert_ta tests
+
+assert('integration: full typedargs_test invocation') do
+  expected_out = <<'OUT'
+{"mode" => "ultra", "db.user" => "admin", "db.pass" => "p@ssw0rd", "item" => ["apple", "banana", "cherry", "date", "elderberry"], "range" => {"min" => 10, "max" => 20}, "servers" => [{"name" => "alpha", "port" => 80}, {"name" => "beta", "port" => 443}, {"name" => "gamma", "port" => 22}, {"name" => "delta", "port" => 8080}, {"name" => "epsilon", "port" => 3306}], "cache.enabled" => true, "cache.timeout" => 99.9, "feature" => [{"name" => "login", "enabled" => true}, {"name" => "signup", "enabled" => false}, {"name" => "notifications", "enabled" => nil}, {"name" => "analytics", "enabled" => true}], "level" => 9001, "ratio" => 3.14159, "verbose" => true, "debug" => nil, "list" => ["one", "two", "three", "four", "five"], "coords" => {"x" => 7, "y" => 8, "z" => 9}, "extra" => [{"id" => 1001, "value" => "foo"}, {"id" => 1002, "value" => "bar"}, {"id" => 1003, "value" => "baz"}, {"id" => 1004, "value" => "qux"}, {"id" => 1005, "value" => "quux"}], "v" => true, "d" => true, "x" => true, "y" => true}
+OUT
+
+  args = [
+    "--mode=ultra",
+    "--db.user=admin",
+    "--db.pass=p@ssw0rd",
+    "--item+=apple", "--item+=banana", "--item+=cherry", "--item+=date", "--item+=elderberry",
+    "--range:min,max:=10,20",
+    "--servers+:name,port:=alpha,80", "--servers+:name,port:=beta,443", "--servers+:name,port:=gamma,22",
+    "--servers+:name,port:=delta,8080", "--servers+:name,port:=epsilon,3306",
+    "--cache.enabled=true", "--cache.timeout=99.9",
+    "--feature+:name,enabled:=login,true", "--feature+:name,enabled:=signup,false",
+    "--feature+:name,enabled:=notifications,nil", "--feature+:name,enabled:=analytics,true",
+    "--level=9001", "--ratio=3.14159",
+    "--verbose", "--debug=nil",
+    "--list+=one", "--list+=two", "--list+=three", "--list+=four", "--list+=five",
+    "--coords:x,y,z:=1,2,3", "--coords:x,y,z:=4,5,6", "--coords:x,y,z:=7,8,9",
+    "--extra+:id,value:=1001,foo", "--extra+:id,value:=1002,bar", "--extra+:id,value:=1003,baz",
+    "--extra+:id,value:=1004,qux", "--extra+:id,value:=1005,quux",
+    "-v", "-d", "-x", "-y"
+  ]
+
+  assert_ta(expected_out, "", true, args)
+end
+
+
 # ------------------------------------------------------------
 # INVALID CASES (ASCII ONLY)
 # ------------------------------------------------------------

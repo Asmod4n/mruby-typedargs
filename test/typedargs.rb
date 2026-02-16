@@ -183,7 +183,7 @@ end
 
 assert("TypedArgs: lone dash is invalid number") do
   assert_raise(TypedArgs::InvalidCharacterError) do
-    TypedArgs.opts("--foo=-")
+    TypedArgs.opts("--foo=--")
   end
 end
 

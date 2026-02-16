@@ -69,13 +69,18 @@ module TypedArgs
     class Lexer
       attr_reader :str
 
-      def initialize(str, start_pos, bytesize)
+      def initialize(str, start_pos, bytesize, parsing_key = false)
         @str   = str
         @i     = start_pos
         @start = start_pos
         @end   = start_pos + bytesize
         @n     = str.bytesize
         @end   = @n if @end > @n
+        @parsing_key = !!parsing_key
+      end
+
+      def parsing_key?
+        @parsing_key
       end
 
       def next_token
@@ -92,18 +97,64 @@ module TypedArgs
         when CHAR_COLON then return simple(:COLON)
         when CHAR_QUOTE then return string_token
         else
-          if ident_start?(c)
+          if parsing_key?
+            # strict key parsing: identifiers only
             return ident_token
-          elsif Internal.digit?(c) || (c == CHAR_DASH && peek_digit?)
+          end
+
+          # value mode: decide simply by scanning the whole token up to delimiter
+          if Internal.digit?(c) || (c == CHAR_DASH && peek_digit?)
             return number_token
-          else
-            raise TypedArgs::InvalidCharacterError.new(
-              "Illegal character '" + safe_chr + "'",
-              @i,
-              @str
-            )
+          end
+
+          if Internal.alpha?(c) || c == CHAR_UNDERS
+            # scan the run up to delimiter and check whether every char is ident-continue
+            j = @i
+            all_ident = true
+            while j < @end
+              cc = @str.getbyte(j)
+              break if cc <= 32 || cc == CHAR_COMMA
+              unless ident_continue?(cc)
+                all_ident = false
+                break
+              end
+              j += 1
+            end
+
+            return all_ident ? ident_token : raw_value_token
+          end
+
+          raw_value_token
+        end
+      end
+
+      def raw_value_token
+        start = @i
+        buf = ""
+        while @i < @end
+          c = @str.getbyte(@i)
+          break if c <= 32 || c == CHAR_COMMA
+          buf += @str[@i,1]
+          @i += 1
+        end
+
+        # reject lone or all-dash tokens as invalid number
+        if buf.bytesize > 0
+          j = 0
+          all_dashes = true
+          while j < buf.bytesize
+            if buf.getbyte(j) != CHAR_DASH
+              all_dashes = false
+              break
+            end
+            j += 1
+          end
+          if all_dashes
+            raise TypedArgs::InvalidCharacterError.new("Illegal number", start, @str)
           end
         end
+
+        Token.new(:STRING, buf, start)
       end
 
       private
@@ -111,12 +162,6 @@ module TypedArgs
       def peek_digit?
         return false if (@i + 1) >= @end
         Internal.digit?(@str.getbyte(@i + 1))
-      end
-
-
-      def safe_chr
-        return "?" if @i < 0 || @i >= @n
-        @str[@i, 1]
       end
 
       def simple(type)
@@ -141,15 +186,11 @@ module TypedArgs
             @i += 1
             return Token.new(:STRING, buf, start)
           else
-            buf = buf + @str[@i, 1]
+            buf += @str[@i,1]
             @i += 1
           end
         end
-        raise TypedArgs::UnterminatedStringError.new(
-          "Unterminated string",
-          start,
-          @str
-        )
+        raise TypedArgs::UnterminatedStringError.new("Unterminated string", start, @str)
       end
 
       def ident_start?(c)
@@ -164,58 +205,57 @@ module TypedArgs
 
       def ident_token
         start = @i
-        buf   = ""
-
+        buf = ""
         c = @str.getbyte(@i)
         unless ident_start?(c)
-          raise TypedArgs::InvalidKeyStartError.new(
-            "Invalid key start",
-            @i,
-            @str
-          )
+          if Internal.digit?(c)
+            raise TypedArgs::InvalidKeyStartError.new("Invalid key start", @i, @str)
+          else
+            raise TypedArgs::InvalidCharacterError.new("Illegal character in key", @i, @str)
+          end
         end
-        buf = buf + @str[@i, 1]
+        buf += @str[@i,1]
         @i += 1
-
         while @i < @end
           c = @str.getbyte(@i)
           break unless ident_continue?(c)
-          buf = buf + @str[@i, 1]
+          buf += @str[@i,1]
           @i += 1
         end
-
         Token.new(:IDENT, buf, start)
       end
 
       def number_token
         start = @i
-        buf   = ""
-        dot   = false
+        buf = ""
+        dot = false
+        digits = 0
 
         if @str.getbyte(@i) == CHAR_DASH
-          buf = buf + "-"
+          buf += "-"
           @i += 1
         end
 
         while @i < @end
           c = @str.getbyte(@i)
           if Internal.digit?(c)
-            buf = buf + @str[@i, 1]
+            buf += @str[@i,1]
             @i += 1
+            digits += 1
           elsif c == CHAR_DOT
             if dot
-              raise TypedArgs::InvalidNumberError.new(
-                "Invalid number format",
-                start,
-                @str
-              )
+              raise TypedArgs::InvalidNumberError.new("Invalid number format", start, @str)
             end
             dot = true
-            buf = buf + "."
+            buf += "."
             @i += 1
           else
             break
           end
+        end
+
+        if digits == 0
+          raise TypedArgs::InvalidCharacterError.new("Illegal number", start, @str)
         end
 
         if dot
@@ -225,6 +265,7 @@ module TypedArgs
         end
       end
     end
+
 
     # ============================================================
     # KEY PARSER
@@ -397,6 +438,14 @@ module TypedArgs
       end
 
       def parse_scalar
+        if @tok.type == :EOF
+          raise TypedArgs::UnexpectedTokenError.new(
+            "Unexpected EOF",
+            @tok.pos,
+            @lx.str
+          )
+        end
+
         case @tok.type
         when :STRING
           v = @tok.value
@@ -409,16 +458,22 @@ module TypedArgs
         when :IDENT
           v = @tok.value
           consume(:IDENT)
-          return true  if v == "true"
-          return false if v == "false"
-          return nil if v == "nil"
-          v
+          case v
+          when "true"  then true
+          when "false" then false
+          when "nil"   then nil
+          else
+            v
+          end
         else
-          raise TypedArgs::UnexpectedTokenError.new(
-            "Unexpected " + @tok.type.to_s,
-            @tok.pos,
-            @lx.str
-          )
+          # fallback: treat everything else as a raw string until comma or EOF
+          buf = ""
+          start_pos = @tok.pos
+          while @tok.type != :COMMA && @tok.type != :EOF
+            buf += @tok.value.to_s
+            @tok = @lx.next_token
+          end
+          buf
         end
       end
 
@@ -484,7 +539,8 @@ module TypedArgs
             val_len   = 0
           end
 
-          key_lexer = Lexer.new(arg, body_start, key_len)
+          # create key lexer in strict key parsing mode
+          key_lexer = Lexer.new(arg, body_start, key_len, true)
           key_ast   = KeyParser.new(key_lexer).parse
 
           name = Internal.resolve_name(key_ast[:name])
