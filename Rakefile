@@ -18,13 +18,19 @@ task :compile => :mruby do
   end
 end
 
-desc "test"
-task :test => :mruby do
+desc "test mruby"
+task :test_mruby => :mruby do
   Dir.chdir("mruby") do
     ENV["MRUBY_CONFIG"] = MRUBY_CONFIG_PATH
     sh "rake all test"
   end
 end
+
+desc "test CRuby"
+task :test_cruby do
+  ruby "-Ilib -Ispec -Itest spec/cruby_tests.rb"
+end
+
 
 desc "cleanup"
 task :clean do
@@ -33,5 +39,7 @@ task :clean do
     sh "rake deep_clean"
   end
 end
+
+task :test => [:test_cruby, :test_mruby]
 
 task :default => :test
