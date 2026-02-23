@@ -85,7 +85,7 @@ module TypedArgs
           name = Internal.resolve_name(raw)
 
           if name.nil? || name.length == 0
-            raise TypedArgs::InvalidKeyStartError.new(
+            raise InvalidKeyStartError.new(
               "Invalid key start",
               1,
               arg
@@ -98,7 +98,7 @@ module TypedArgs
                 (c0 >= "A" && c0 <= "Z") ||
                 (c0 >= "a" && c0 <= "z") ||
                 (c0 > "\u007F") # treat non-ASCII single-char as letter candidate
-            raise TypedArgs::InvalidCharacterError.new(
+            raise InvalidCharacterError.new(
               "Illegal character in short flag",
               1,
               arg
@@ -118,7 +118,7 @@ module TypedArgs
               ch == "." ||
               (ch > "\u007F") # allow non-ASCII letters
             unless valid
-              raise TypedArgs::InvalidCharacterError.new(
+              raise InvalidCharacterError.new(
                 "Illegal character in short flag",
                 1,
                 arg

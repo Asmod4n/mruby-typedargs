@@ -39,24 +39,24 @@ module TypedArgs
         when "." then @i = i + 1; return Token.new(:DOT, nil, i)
         when "+" then @i = i + 1; return Token.new(:PLUS, nil, i)
         when ":" then @i = i + 1; return Token.new(:COLON, nil, i)
-when "\""
-  start = i
-  i += 1
+        when "\""
+          start = i
+          i += 1
 
-  # scan UTF‑8 codepoints until closing quote
-  while i < end_i
-    cp, ni = TypedArgs::Internal.utf8_next(s, i)
+          # scan UTF‑8 codepoints until closing quote
+          while i < end_i
+            cp, ni = Internal.utf8_next(s, i)
 
-    if cp == 0x22  # '"'
-      val = s[start + 1, i - (start + 1)]
-      @i = ni
-      return Token.new(:STRING, val, start)
-    end
+            if cp == 0x22  # '"'
+              val = s[start + 1, i - (start + 1)]
+              @i = ni
+              return Token.new(:STRING, val, start)
+            end
 
-    i = ni
-  end
+            i = ni
+          end
 
-  raise TypedArgs::UnterminatedStringError.new("Unterminated string", start, s)
+          raise UnterminatedStringError.new("Unterminated string", start, s)
         end
 
         # parsing_key fast path
@@ -99,7 +99,7 @@ when "\""
             @i = i
             # detect all-dash invalid number
             if all_dashes?(val)
-              raise TypedArgs::InvalidCharacterError.new("Illegal number", start, s)
+              raise InvalidCharacterError.new("Illegal number", start, s)
             end
             return Token.new(:STRING, val, start)
           end
@@ -109,13 +109,13 @@ when "\""
         start = i
         while i < end_i
           cc = s[i,1]
-          break if cc <= " " || cc == ","
+          break if cc == ","
           i += 1
         end
         val = s[start, i - start]
         @i = i
         if all_dashes?(val)
-          raise TypedArgs::InvalidCharacterError.new("Illegal number", start, s)
+          raise InvalidCharacterError.new("Illegal number", start, s)
         end
         Token.new(:STRING, val, start)
       end
@@ -128,9 +128,9 @@ when "\""
         ch = s[i,1]
         unless ident_start_char?(ch)
           if ascii_digit?(ch)
-            raise TypedArgs::InvalidKeyStartError.new("Invalid key start", i, s)
+            raise InvalidKeyStartError.new("Invalid key start", i, s)
           else
-            raise TypedArgs::InvalidCharacterError.new("Illegal character in key", i, s)
+            raise InvalidCharacterError.new("Illegal character in key", i, s)
           end
         end
         i += 1
@@ -159,7 +159,7 @@ when "\""
             digits += 1
             i += 1
           elsif c == "."
-            raise TypedArgs::InvalidNumberError.new("Invalid number format", start, s) if dot
+            raise InvalidNumberError.new("Invalid number format", start, s) if dot
             dot = true
             i += 1
           else
@@ -167,7 +167,7 @@ when "\""
           end
         end
 
-        raise TypedArgs::InvalidCharacterError.new("Illegal number", start, s) if digits == 0
+        raise InvalidCharacterError.new("Illegal number", start, s) if digits == 0
 
         val = s[start, i - start]
         @i = i

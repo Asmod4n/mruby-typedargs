@@ -49,7 +49,7 @@ module TypedArgs
           bucket = char_bucket(ch)
           if bucket != :other
             if seen && seen != bucket
-              raise TypedArgs::InvalidCharacterError.new("Invalid or mixed-script key", i, str)
+              raise InvalidCharacterError.new("Invalid or mixed-script key", i, str)
             end
             seen ||= bucket
           end

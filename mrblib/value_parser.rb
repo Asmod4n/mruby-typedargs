@@ -15,14 +15,14 @@ module TypedArgs
           vals.push(parse_scalar)
         end
         if vals.size != expected
-          raise TypedArgs::ArityMismatchError.new("Arity mismatch: expected #{expected}, got #{vals.size}", @tok.pos, @lx.str)
+          raise ArityMismatchError.new("Arity mismatch: expected #{expected}, got #{vals.size}", @tok.pos, @lx.str)
         end
         vals
       end
 
       def parse_scalar
         if @tok.type == :EOF
-          raise TypedArgs::UnexpectedTokenError.new("Unexpected EOF", @tok.pos, @lx.str)
+          raise UnexpectedTokenError.new("Unexpected EOF", @tok.pos, @lx.str)
         end
 
         case @tok.type
@@ -61,7 +61,7 @@ module TypedArgs
         if Object.const_defined?(:Float)
           return s.to_f if float_string?(s)
         end
-        raise TypedArgs::InvalidNumberError.new("Invalid number", 0, s)
+        raise InvalidNumberError.new("Invalid number", @tok.pos, s)
       end
 
       def integer_string?(s)
@@ -107,7 +107,7 @@ module TypedArgs
 
       def consume(type)
         if @tok.type != type
-          raise TypedArgs::UnexpectedTokenError.new("Expected #{type}, got #{@tok.type}", @tok.pos, @lx.str)
+          raise UnexpectedTokenError.new("Expected #{type}, got #{@tok.type}", @tok.pos, @lx.str)
         end
         @tok = @lx.next_token
       end
