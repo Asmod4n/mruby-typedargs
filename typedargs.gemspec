@@ -1,7 +1,8 @@
 # typedargs.gemspec
+require_relative 'mrblib/version.rb'
 Gem::Specification.new do |s|
   s.name          = "typedargs"
-  s.version       = "0.1.0"
+  s.version       = TypedArgs::VERSION
   s.summary       = "A tiny, deterministic operator-typed CLI language."
   s.description   = "Pure Ruby implementation of TypedArgs, a small explicit grammar for structured CLI argument parsing. Works on both MRuby and CRuby."
   s.authors       = ["Asmod4n"]
